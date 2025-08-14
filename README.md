@@ -52,3 +52,7 @@ The `products_config.json` file contains:
 ✅ **Delay Control** - Configurable time between updates  
 ✅ **Price Confirmation** - Shows current vs new price  
 ✅ **API Integration** - Uses official Wallapop API endpoints
+
+## License
+
+This project is licensed under the MIT License — see the `LICENSE` file for details.
