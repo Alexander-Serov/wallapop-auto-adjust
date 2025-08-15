@@ -1,52 +1,39 @@
 #!/usr/bin/env python3
-
 import json
-from typing import Dict, List
 
 def analyze_captured_requests():
     """Analyze the captured Wallapop API requests"""
-    
     try:
         with open('../wallapop_analysis.json', 'r') as f:
             data = json.load(f)
     except FileNotFoundError:
         print("No analysis file found. Run analyze_requests.py first.")
         return
-    
+
     print("=== WALLAPOP API ANALYSIS ===\n")
-    
-    # Login Analysis
     print("LOGIN ENDPOINTS:")
-    login_endpoints = [
+    for endpoint in [
         "https://api.wallapop.com/api/v3/access/login",
         "https://api.wallapop.com/api/v3/access/authorize",
         "https://es.wallapop.com/api/auth/session",
-        "https://es.wallapop.com/api/auth/federated-session"
-    ]
-    
-    for endpoint in login_endpoints:
+        "https://es.wallapop.com/api/auth/federated-session",
+    ]:
         print(f"  - {endpoint}")
-    
-    # Products Analysis  
+
     print("\nPRODUCT ENDPOINTS:")
-    product_endpoints = [
+    for endpoint in [
         "https://api.wallapop.com/api/v3/user/items",
         "https://api.wallapop.com/api/v3/users/me/stats",
-        "https://api.wallapop.com/api/v3/user/items/review"
-    ]
-    
-    for endpoint in product_endpoints:
+        "https://api.wallapop.com/api/v3/user/items/review",
+    ]:
         print(f"  - {endpoint}")
-    
-    # Update Analysis
+
     print("\nUPDATE ENDPOINTS:")
-    update_endpoints = [
-        "https://api.wallapop.com/api/v3/items/{id}/edit?language=es"
-    ]
-    
-    for endpoint in update_endpoints:
+    for endpoint in [
+        "https://api.wallapop.com/api/v3/items/{id}/edit?language=es",
+    ]:
         print(f"  - {endpoint}")
-    
+
     print("\n=== KEY FINDINGS ===")
     print("1. Login uses browser-based authentication with session cookies")
     print("2. Products are fetched from /api/v3/user/items")

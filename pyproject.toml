@@ -1,0 +1,30 @@
+[project]
+name = "wallapop-auto-adjust"
+version = "1.0.0"
+description = "Automatic price adjustment tool for Wallapop sales"
+authors = [
+    {name = "Alexander Serov",email = "asserov@gmail.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "requests (>=2.32.4,<3.0.0)",
+    "beautifulsoup4 (>=4.13.4,<5.0.0)",
+    "selenium (>=4.35.0,<5.0.0)",
+    "python-dateutil (>=2.9.0.post0,<3.0.0)",
+    "python-dotenv (>=1.1.1,<2.0.0)"
+]
+
+[project.scripts]
+wallapop-auto-adjust = "wallapop_auto_adjust.cli:main"
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+packages = [
+    { include = "wallapop_auto_adjust", from = "src" }
+]

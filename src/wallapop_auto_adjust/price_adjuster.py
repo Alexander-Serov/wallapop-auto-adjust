@@ -1,7 +1,5 @@
-from datetime import datetime, timedelta
-from dateutil.parser import parse
+from datetime import datetime
 from typing import Dict, Any
-import math
 
 class PriceAdjuster:
     def __init__(self, wallapop_client, config_manager):
@@ -48,8 +46,6 @@ class PriceAdjuster:
             new_price = 1.0
         
         return new_price
-    
-
     
     def get_user_adjustment(self, product_name: str, current_price: float, default_adjustment: Any) -> Any:
         """Get adjustment decision from user"""

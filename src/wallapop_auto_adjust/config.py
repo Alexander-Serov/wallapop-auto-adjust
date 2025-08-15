@@ -3,21 +3,22 @@ import os
 from datetime import datetime
 from typing import Dict, Any, List
 
+
 class ConfigManager:
     def __init__(self, config_path: str = "products_config.json"):
         self.config_path = config_path
         self.config = self._load_config()
-    
+
     def _load_config(self) -> Dict[str, Any]:
         if os.path.exists(self.config_path):
             with open(self.config_path, 'r') as f:
                 return json.load(f)
         return {"products": {}, "settings": {"delay_days": 1}}
-    
+
     def save_config(self):
         with open(self.config_path, 'w') as f:
             json.dump(self.config, f, indent=2)
-    
+
     def update_products(self, products: List[Dict[str, Any]]):
         """Update config with new products, preserving existing settings"""
         for product in products:
@@ -27,7 +28,7 @@ class ConfigManager:
                 last_mod = product.get('last_modified')
                 if isinstance(last_mod, (int, float)):
                     last_mod = datetime.fromtimestamp(last_mod / 1000 if last_mod > 1e10 else last_mod).astimezone().isoformat()
-                
+
                 self.config["products"][product_id] = {
                     "name": product['name'],
                     "adjustment": "keep",
@@ -41,16 +42,16 @@ class ConfigManager:
                     if isinstance(last_mod, (int, float)):
                         last_mod = datetime.fromtimestamp(last_mod / 1000 if last_mod > 1e10 else last_mod).astimezone().isoformat()
                     self.config["products"][product_id]["last_modified"] = last_mod
-    
+
     def get_product_config(self, product_id: str) -> Dict[str, Any]:
         return self.config["products"].get(product_id, {})
-    
+
     def update_last_modified(self, product_id: str, date: str = None):
         if date is None:
             date = datetime.now().astimezone().isoformat()
         if product_id in self.config["products"]:
             self.config["products"][product_id]["last_modified"] = date
             self.save_config()
-    
+
     def get_delay_days(self) -> int:
         return self.config["settings"].get("delay_days", 1)

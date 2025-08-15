@@ -11,9 +11,9 @@ pip install -r requirements.txt
 
 ## Usage
 
-### First Run
+### First Run (via CLI)
 ```bash
-python run.py
+wallapop-auto-adjust
 ```
 - Complete manual login once (handles captcha/SMS)
 - Session persists for 24 hours
@@ -32,7 +32,7 @@ python configure.py
 
 ### Run Adjustments
 ```bash
-python run.py
+wallapop-auto-adjust
 ```
 - Uses saved session (no login needed)
 - Applies configured price changes

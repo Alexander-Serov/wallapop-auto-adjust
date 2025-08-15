@@ -7,7 +7,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-from session_manager import SessionManager
+from wallapop_auto_adjust.session_manager import SessionManager
 
 class WallapopClient:
     def __init__(self):
@@ -254,7 +254,7 @@ class WallapopClient:
                 },
                 'mode': {
                     'action': 'edit',
-                    'id': f'{product_id}-edit-session'  # Generate a unique edit session ID
+                    'id': f'{product_id}-edit-session'
                 }
             }
             
@@ -283,7 +283,6 @@ class WallapopClient:
                 'X-DeviceOS': '0'
             }
             
-            # Transform edit format to update format - match the captured request exactly
             payload = {
                 'attributes': {
                     'title': product_details.get('title', {}).get('original', ''),
@@ -299,11 +298,11 @@ class WallapopClient:
                 'location': {
                     'latitude': product_details.get('location', {}).get('latitude', 0),
                     'longitude': product_details.get('location', {}).get('longitude', 0),
-                    'approximated': False  # Force to false like in successful request
+                    'approximated': False
                 },
                 'delivery': {
                     'allowed_by_user': product_details.get('shipping', {}).get('user_allows_shipping', True),
-                    'max_weight_kg': int(float(product_details.get('type_attributes', {}).get('up_to_kg', {}).get('value', '1.0')))  # Force to integer
+                    'max_weight_kg': int(float(product_details.get('type_attributes', {}).get('up_to_kg', {}).get('value', '1.0')))
                 }
             }
             
