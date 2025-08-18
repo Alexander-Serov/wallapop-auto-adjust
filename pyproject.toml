@@ -15,6 +15,32 @@ dependencies = [
     "python-dateutil (>=2.9.0.post0,<3.0.0)",
     "python-dotenv (>=1.1.1,<2.0.0)"
 ]
+keywords = [
+    "wallapop",
+    "automation",
+    "pricing",
+    "cli",
+    "marketplace"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Environment :: Console",
+    "Operating System :: OS Independent",
+    "Topic :: Internet",
+    "Topic :: Utilities"
+]
+
+[project.urls]
+Homepage = "https://github.com/Alexander-Serov/wallapop-auto-adjust"
+Repository = "https://github.com/Alexander-Serov/wallapop-auto-adjust"
+Issues = "https://github.com/Alexander-Serov/wallapop-auto-adjust/issues"
 
 [project.scripts]
 wallapop-auto-adjust = "wallapop_auto_adjust.cli:main"
