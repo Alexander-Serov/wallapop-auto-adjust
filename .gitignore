@@ -1,3 +1,19 @@
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+
+# Poetry
+poetry.lock
+
+# Local artifacts
+wallapop_session.json
+products_config.json
+.env
 # Python
 __pycache__/
 *.py[cod]

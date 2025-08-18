@@ -28,3 +28,15 @@ build-backend = "poetry.core.masonry.api"
 packages = [
     { include = "wallapop_auto_adjust", from = "src" }
 ]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+black = "^25.1.0"
+
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests"
+]
+addopts = "-q"
+
