@@ -133,7 +133,6 @@ If you know how, try adding tests for the new functionality within the existing 
 
 See also: [CONTRIBUTING](CONTRIBUTING.md)
 
-
 Requirements: Python 3.10+ and Poetry
 
 1) Install Poetry and dependencies
