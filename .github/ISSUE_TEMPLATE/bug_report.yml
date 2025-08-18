@@ -1,0 +1,32 @@
+name: Bug report
+description: Create a report to help us improve
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: Describe the bug
+      description: What happened, and what did you expect to happen?
+      placeholder: Clear, concise description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps that reproduce the behavior.
+      placeholder: 1) ... 2) ... 3) ...
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Logs / screenshots
+      description: Paste relevant logs or screenshots (remove personal data).
+      render: shell
+  - type: input
+    attributes:
+      label: Environment
+      description: OS and Python version
+      placeholder: e.g., macOS 14.5, Python 3.11
+  - type: input
+    attributes:
+      label: CLI version
+      description: Output of `pip show wallapop-auto-adjust`.
