@@ -55,9 +55,9 @@ wallapop_analysis.json
 .DS_Store
 Thumbs.db
 
-# Test files
-test_*.py
-debug_*.py
-quick_*.py
-fix_*.py
-manual_*.py
+# Test files (excluding tests/ directory)
+/test_*.py
+/debug_*.py
+/quick_*.py
+/fix_*.py
+/manual_*.py
