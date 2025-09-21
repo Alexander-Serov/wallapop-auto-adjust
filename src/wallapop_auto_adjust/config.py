@@ -43,6 +43,30 @@ class ConfigManager:
                         last_mod = datetime.fromtimestamp(last_mod / 1000 if last_mod > 1e10 else last_mod).astimezone().isoformat()
                     self.config["products"][product_id]["last_modified"] = last_mod
 
+    def remove_sold_products(self, current_products: List[Dict[str, Any]]) -> List[str]:
+        """Remove products from config that are no longer in the current product list (i.e., sold)
+        
+        Args:
+            current_products: List of products currently returned by API
+            
+        Returns:
+            List of product names that were removed
+        """
+        # Get current product IDs from API
+        current_product_ids = {product['id'] for product in current_products}
+        
+        # Find products in config that are no longer in API response
+        config_product_ids = set(self.config["products"].keys())
+        sold_product_ids = config_product_ids - current_product_ids
+        
+        removed_products = []
+        for product_id in sold_product_ids:
+            product_name = self.config["products"][product_id].get("title", f"Product {product_id}")
+            removed_products.append(product_name)
+            del self.config["products"][product_id]
+        
+        return removed_products
+
     def get_product_config(self, product_id: str) -> Dict[str, Any]:
         return self.config["products"].get(product_id, {})
 

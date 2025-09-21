@@ -46,6 +46,16 @@ def main() -> None:
     # Update config with discovered products
     print(f"\n3. Found {len(products)} products. Updating configuration...")
     config_manager.update_products(products)
+    
+    # Remove sold products from config
+    sold_products = config_manager.remove_sold_products(products)
+    if sold_products:
+        print(f"\n📦 Removed {len(sold_products)} sold product(s) from configuration:")
+        for product_name in sold_products:
+            print(f"   - {product_name}")
+    else:
+        print("\n✅ No sold products to remove from configuration.")
+    
     config_manager.save_config()
 
     # Process price adjustments

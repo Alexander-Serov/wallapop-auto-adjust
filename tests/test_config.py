@@ -63,3 +63,54 @@ class TestConfigManager:
         # Set custom value
         config_manager.config["settings"]["delay_days"] = 5
         assert config_manager.get_delay_days() == 5
+
+    def test_remove_sold_products(self):
+        """Test remove_sold_products method."""
+        config_path = "/tmp/non_existent_config_file4.json"
+        config_manager = ConfigManager(config_path)
+        
+        # Set up initial config with some products
+        config_manager.config["products"] = {
+            "12345": {
+                "title": "Product 1",
+                "current_price": 100,
+                "last_updated": "2024-01-01T10:00:00"
+            },
+            "67890": {
+                "title": "Product 2", 
+                "current_price": 200,
+                "last_updated": "2024-01-01T10:00:00"
+            },
+            "11111": {
+                "title": "Product 3",
+                "current_price": 300,
+                "last_updated": "2024-01-01T10:00:00"
+            }
+        }
+        
+        # Mock current products from API (Product 2 is sold/missing)
+        current_products = [
+            {"id": "12345", "title": "Product 1", "price": 100},
+            {"id": "11111", "title": "Product 3", "price": 300},
+            {"id": "22222", "title": "Product 4", "price": 400}  # New product
+        ]
+        
+        # Test removing sold products
+        removed_products = config_manager.remove_sold_products(current_products)
+        
+        # Should return the removed product name
+        assert removed_products == ["Product 2"]
+        
+        # Config should no longer contain the sold product
+        assert "67890" not in config_manager.config["products"]
+        assert "12345" in config_manager.config["products"]  # Still there
+        assert "11111" in config_manager.config["products"]  # Still there
+        
+        # Test when no products are sold
+        removed_products = config_manager.remove_sold_products(current_products)
+        assert removed_products == []
+        
+        # Test with empty current products (all sold)
+        all_removed = config_manager.remove_sold_products([])
+        assert set(all_removed) == {"Product 1", "Product 3"}
+        assert config_manager.config["products"] == {}
