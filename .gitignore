@@ -43,20 +43,23 @@ env/
 products_config.json
 wallapop_session.json
 wallapop_analysis.json
+.session/
+cookies.json
 *.log
+*.har
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+.trash/
 
 # OS
 .DS_Store
 Thumbs.db
 
 # Test files (excluding tests/ directory)
-/test_*.py
 /debug_*.py
 /quick_*.py
 /fix_*.py

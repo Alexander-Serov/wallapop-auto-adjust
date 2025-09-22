@@ -116,7 +116,14 @@ Example snippet:
 - “401/unauthorized” or keeps asking to log in
   - Delete the local session file `wallapop_session.json` and re-run.
 - “Where are files stored?”
-  - `products_config.json` and `wallapop_session.json` are stored locally in the project folder.
+
+  - Session artifacts are stored under your home directory by default:
+    - `~/.wallapop-auto-adjust/`
+      - `cookies.json` — your browser cookies (NextAuth session-token, csrf, etc.)
+      - `session_data.json` — derived/session state (e.g., accessToken with short TTL)
+      - `fingerprint.json` — device fingerprint data used for stable headers
+        - Note: `fingerprint.json` is created automatically only when you log in using the browser automation workflow. If you use manual cookie input, this file will not be present.
+  - Product configuration lives in `products_config.json` at the current working directory (CWD).
 
 ## Privacy & disclaimer
 - The authors are not affiliated with Wallapop and provide the tool free of charge for your convenience. Use responsibly and respect Wallapop’s Terms of Service.

@@ -1,691 +1,510 @@
 import requests
-from typing import List, Dict, Any
-import time
+from typing import List, Dict, Any, Optional
 import json
+import sys
+import os
 import random
 from pathlib import Path
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.action_chains import ActionChains
-from wallapop_auto_adjust.session_manager import SessionManager
+from wallapop_auto_adjust.session_persistence import SessionPersistenceManager, SessionManager as _CompatSessionManager
 
-# Constants
-LOGIN_TIMEOUT_SECONDS = 300
-BROWSER_CHECK_INTERVAL_SECONDS = 2
-SESSION_DIR = ".tmp"
-FINGERPRINT_FILE = "browser_fingerprint.json"
 
-# Chrome versions from the last 6 months
-CHROME_VERSIONS = [
-    "119.0.0.0", "120.0.0.0", "121.0.0.0", 
-    "122.0.0.0", "123.0.0.0", "124.0.0.0", "125.0.0.0"
-]
+"""
+Modern Wallapop API client using persistent session management.
 
-# macOS versions (adjust based on your system)
-OS_VERSIONS = [
-    "10_15_7", "11_7_10", "12_7_4", 
-    "13_6_7", "14_6_1", "15_0_0"
-]
+Backwards-compatibility notes:
+- Exposes a `SessionManager` symbol in this module namespace to satisfy legacy tests that patch it.
+- Provides compatibility methods: login, _fresh_login, _manual_cookie_login, _test_auth, and _get_session_fingerprint.
+  These are lightweight shims around the modern SessionPersistenceManager and are primarily for tests.
+"""
 
-WEBKIT_VERSIONS = ["537.36", "605.1.15"]
+# Re-export for tests that patch wallapop_auto_adjust.wallapop_client.SessionManager
+SessionManager = _CompatSessionManager
 
-# Common screen resolutions
-COMMON_RESOLUTIONS = [
-    (1920, 1080), (1366, 768), (1440, 900), 
-    (1536, 864), (1680, 1050), (2560, 1440),
-    (1728, 1117), (1512, 982)
-]
-
-# Platform options
-PLATFORMS = ['MacIntel', 'Win32', 'Linux x86_64']
-
-# Language options
-LANGUAGE_OPTIONS = [
-    ['en-US', 'en'],
-    ['es-ES', 'es', 'en'], 
-    ['ca-ES', 'es', 'en']
-]
-
-# Timezone offset options
-TIMEZONE_OFFSETS = [-480, -420, -360, -300, -240, -180, -120, -60, 0, 60, 120]
-
-# Optional Chrome switches for randomization
-OPTIONAL_CHROME_SWITCHES = [
-    "--disable-gpu",
-    "--disable-extensions", 
-    "--disable-plugins-discovery",
-    "--allow-running-insecure-content",
-    "--disable-background-timer-throttling",
-    "--disable-backgrounding-occluded-windows",
-    "--disable-renderer-backgrounding"
-]
-
-# Random selection range for chrome switches (60-80%)
-CHROME_SWITCHES_MIN_RATIO = 0.6
-CHROME_SWITCHES_MAX_RATIO = 0.8
-
-# Human typing speed range (seconds)
-HUMAN_TYPE_MIN_DELAY = 0.05
-HUMAN_TYPE_MAX_DELAY = 0.2
-
-# Random delay ranges (seconds)
-NAVIGATION_DELAY_MIN = 1.0
-NAVIGATION_DELAY_MAX = 3.0
-PAGE_LOAD_DELAY_MIN = 2.0
-PAGE_LOAD_DELAY_MAX = 4.0
 
 class WallapopClient:
+    """Modern Wallapop API client using persistent session management"""
+    
     def __init__(self):
+        """Initialize the Wallapop client with modern session management"""
+        # Use the compatibility SessionManager so tests can patch this symbol
         self.session_manager = SessionManager()
-        self.session = self.session_manager.session
         self.base_url = "https://api.wallapop.com"
         self.web_url = "https://es.wallapop.com"
-        
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Origin': 'https://es.wallapop.com',
-            'Referer': 'https://es.wallapop.com/app/catalog/published',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-site'
-        })
-        
-        self.driver = None
-        
-        # Set session directory for fingerprint persistence
-        self.session_dir = Path(SESSION_DIR)
-        self.session_dir.mkdir(exist_ok=True)  # Create directory if it doesn't exist
-    
-    def _generate_random_user_agent(self):
-        """Generate a realistic, random user agent"""
-        chrome_version = random.choice(CHROME_VERSIONS)
-        os_version = random.choice(OS_VERSIONS)
-        webkit_version = random.choice(WEBKIT_VERSIONS)
-        
-        return f"Mozilla/5.0 (Macintosh; Intel Mac OS X {os_version}) AppleWebKit/{webkit_version} (KHTML, like Gecko) Chrome/{chrome_version} Safari/{webkit_version}"
+        # Lazily load session when needed; do not raise during __init__ (tests patch behavior)
+        self.session = None
+        # Use the same home session directory as SessionPersistenceManager (no env override)
+        self.session_dir = Path.home() / '.wallapop-auto-adjust'
+        try:
+            self.session_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        self.fingerprint_file = self.session_dir / 'fingerprint.json'
+        # Do not set headers yet; headers are applied when the session is actually loaded
 
-    def _get_random_viewport(self):
-        """Get random but realistic viewport dimensions"""
-        return random.choice(COMMON_RESOLUTIONS)
+    def _make_authenticated_request(self, method: str, url: str, **kwargs) -> Optional[requests.Response]:
+        """Make an authenticated request using the session manager"""
+        return self.session_manager.make_authenticated_request(method, url, **kwargs)
 
-    def _get_session_fingerprint(self):
-        """Maintain consistent fingerprint for this session"""
-        fingerprint_file = self.session_dir / FINGERPRINT_FILE
-        
-        if fingerprint_file.exists():
-            with open(fingerprint_file) as f:
-                return json.load(f)
-        
-        # Generate new fingerprint for this session
+    # -----------------------------
+    # Backwards-compatible helpers
+    # -----------------------------
+    def _ensure_session(self) -> None:
+        """Ensure the underlying requests.Session is initialized and headers applied."""
+        if not self.session_manager.session:
+            # Try to load; ignore return here as callers will handle auth state
+            self.session_manager.load_session()
+        self.session = self.session_manager.session
+        if self.session and 'User-Agent' not in self.session.headers:
+            # Set common headers for all requests once
+            self.session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Origin': 'https://es.wallapop.com',
+                'Referer': 'https://es.wallapop.com/app/catalog/published',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-site'
+            })
+
+    def _get_session_fingerprint(self) -> Dict[str, Any]:
+        """Generate or load a simple browser fingerprint for the session.
+
+        Returns a dict with keys: user_agent, viewport(list), platform, languages(list), timezone_offset(int)
+        """
+        try:
+            if self.fingerprint_file.exists():
+                with open(self.fingerprint_file, 'r') as f:
+                    return json.load(f)
+        except Exception:
+            pass
+
+        # Randomized components (values chosen will be controlled by tests via random.choice patches)
+        chrome_versions = ["120.0.0.0", "121.0.6167.85", "122.0.6261.70"]
+        os_versions = ["11_7_10", "13_5_2", "12_6_1"]
+        webkit_versions = ["537.36", "605.1.15"]
+        viewports = [(1920, 1080), (1536, 960), (2560, 1440)]
+        platforms = ["MacIntel", "Win32", "Linux x86_64"]
+        languages_list = [["en-US", "en"], ["es-ES", "es"], ["fr-FR", "fr"]]
+        tz_offsets = [-300, 60, 0]
+
+        chrome = random.choice(chrome_versions)
+        os_ver = random.choice(os_versions)
+        webkit = random.choice(webkit_versions)
+        viewport = random.choice(viewports)
+        platform = random.choice(platforms)
+        languages = random.choice(languages_list)
+        tz_offset = random.choice(tz_offsets)
+
+        user_agent = (
+            f"Mozilla/5.0 (Macintosh; Intel Mac OS X {os_ver}) "
+            f"AppleWebKit/{webkit} (KHTML, like Gecko) "
+            f"Chrome/{chrome} Safari/{webkit}"
+        )
         fingerprint = {
-            'user_agent': self._generate_random_user_agent(),
-            'viewport': self._get_random_viewport(),
-            'platform': random.choice(PLATFORMS),
-            'languages': random.choice(LANGUAGE_OPTIONS),
-            'timezone_offset': random.choice(TIMEZONE_OFFSETS)
+            "user_agent": user_agent,
+            "viewport": [viewport[0], viewport[1]],  # store as list for JSON compatibility
+            "platform": platform,
+            "languages": languages,
+            "timezone_offset": tz_offset,
         }
-        
-        # Save for this session
-        with open(fingerprint_file, 'w') as f:
-            json.dump(fingerprint, f)
-        
+        try:
+            with open(self.fingerprint_file, 'w') as f:
+                json.dump(fingerprint, f)
+        except Exception:
+            pass
         return fingerprint
 
-    def _generate_fingerprint_script(self, fingerprint):
-        """Generate randomized browser fingerprint injection script"""
-        width, height = fingerprint['viewport']
-        
-        fingerprint_script = f"""
-            // Remove webdriver property
-            Object.defineProperty(navigator, 'webdriver', {{
-                get: () => undefined
-            }});
-            
-            // Randomize navigator properties
-            Object.defineProperty(navigator, 'languages', {{
-                get: () => {json.dumps(fingerprint['languages'])}
-            }});
-            
-            Object.defineProperty(navigator, 'platform', {{
-                get: () => '{fingerprint['platform']}'
-            }});
-            
-            // Randomize screen properties
-            Object.defineProperty(screen, 'width', {{
-                get: () => {width}
-            }});
-            Object.defineProperty(screen, 'height', {{
-                get: () => {height}
-            }});
-            Object.defineProperty(screen, 'availWidth', {{
-                get: () => {width}
-            }});
-            Object.defineProperty(screen, 'availHeight', {{
-                get: () => {height - random.randint(30, 80)}
-            }});
-            
-            // Add realistic plugin fingerprint
-            Object.defineProperty(navigator, 'plugins', {{
-                get: () => {{
-                    return [
-                        {{"name": "Chrome PDF Plugin", "length": {random.randint(1, 3)}}},
-                        {{"name": "Chrome PDF Viewer", "length": {random.randint(1, 3)}}},
-                        {{"name": "Native Client", "length": {random.randint(1, 2)}}}
-                    ];
-                }}
-            }});
-            
-            // Randomize timing slightly
-            const originalPerformanceNow = performance.now;
-            performance.now = function() {{
-                return originalPerformanceNow.call(this) + {random.uniform(-0.5, 0.5)};
-            }};
-            
-            // Randomize timezone
-            Date.prototype.getTimezoneOffset = function() {{
-                return {fingerprint['timezone_offset']};
-            }};
-        """
-        
-        return fingerprint_script
-
-    def _human_like_type(self, element, text):
-        """Type text with human-like timing"""
-        for char in text:
-            element.send_keys(char)
-            time.sleep(random.uniform(HUMAN_TYPE_MIN_DELAY, HUMAN_TYPE_MAX_DELAY))
-
-    def _add_human_behavior(self):
-        """Add subtle human-like behaviors"""
-        # Random small mouse movements
+    def _test_auth(self) -> bool:
+        """Lightweight auth test – here we just rely on session status."""
         try:
-            actions = ActionChains(self.driver)
-            actions.move_by_offset(
-                random.randint(-10, 10), 
-                random.randint(-10, 10)
-            ).perform()
-        except:
-            pass  # Ignore if this fails
+            status = self.session_manager.get_session_status()
+            return bool(status.get('valid'))
+        except Exception:
+            return False
+
+    def _fresh_login(self, email: str, password: str) -> bool:
+        """Attempt an automatic browser-assisted login using Selenium.
+
+        This opens a real browser window to https://es.wallapop.com/auth/signin.
+        You complete the login flow manually (captcha/2FA supported). When login
+        is detected, session cookies are extracted and persisted, and the access
+        token is refreshed via SessionPersistenceManager.
+
+        Returns True when a valid session is available afterwards.
+        """
+        # Lazy-import heavy deps to avoid cost at import time
+        try:
+            import importlib
+            uc = importlib.import_module('undetected_chromedriver')
+            By = importlib.import_module('selenium.webdriver.common.by').By
+            WebDriverWait = importlib.import_module('selenium.webdriver.support.ui').WebDriverWait
+            EC = importlib.import_module('selenium.webdriver.support.expected_conditions')
+            Options = importlib.import_module('selenium.webdriver.chrome.options').Options
+        except Exception as e:
+            print(f"Automatic login unavailable (selenium dependency missing?): {e}")
+            return False
+
+        # Ensure session exists and headers are set before we begin
+        self._ensure_session()
+
+        # Build a consistent fingerprint for this session
+        fp = self._get_session_fingerprint()
+        ua = fp.get('user_agent')
+        viewport = fp.get('viewport') or [1280, 800]
+        width, height = int(viewport[0]), int(viewport[1])
+
+        # Configure the browser
+        options = Options()
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--no-sandbox")
+        if ua:
+            options.add_argument(f"--user-agent={ua}")
+        options.add_argument(f"--window-size={width},{height}")
+
+        driver = None
+        try:
+            print("Starting browser for automatic login...")
+            driver = uc.Chrome(options=options)
+            driver.get("https://es.wallapop.com/auth/signin")
+
+            # Wait for the page body to load
+            try:
+                WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+            except Exception:
+                pass
+
+            print("Please complete the Wallapop login in the opened browser.")
+            print("The tool will continue automatically once login is detected.")
+
+            # Poll until logged-in state is detected or timeout
+            def login_completed() -> bool:
+                try:
+                    url = driver.current_url
+                    # Simple heuristics indicating we are in the app area
+                    if any(k in url for k in ("/app/", "/app/catalog", "you", "published")):
+                        return True
+                    # Or presence of typical user UI elements
+                    els = driver.find_elements(By.CSS_SELECTOR, "[data-testid*='user'], .user-menu, .profile-menu")
+                    return len(els) > 0
+                except Exception:
+                    return False
+
+            # Up to ~5 minutes, check every 2s
+            import time as _time
+            max_wait, step, waited = 300, 2, 0
+            while waited < max_wait and not login_completed():
+                _time.sleep(step)
+                waited += step
+
+            if not login_completed():
+                print("Login was not detected in time. Closing browser.")
+                return False
+
+            # Navigate to a page that triggers federated-session cookie refresh
+            try:
+                driver.get("https://es.wallapop.com/app/catalog/published")
+                _time.sleep(2)
+                driver.get("https://es.wallapop.com/api/auth/federated-session")
+                _time.sleep(2)
+            except Exception:
+                pass
+
+            # Extract cookies and persist
+            cookies = {}
+            try:
+                for c in driver.get_cookies():
+                    cookies[c.get('name')] = c.get('value')
+            except Exception:
+                pass
+
+            if not cookies:
+                print("Could not read cookies from the browser session.")
+                return False
+
+            # Persist and attempt refresh
+            try:
+                if hasattr(self.session_manager, 'save_session'):
+                    self.session_manager.save_session(cookies)
+            except Exception:
+                pass
+
+            ok, _ = self.session_manager.refresh_access_token()
+            if not ok:
+                print("Failed to refresh access token after automatic login.")
+                return False
+
+            # Final quick auth check
+            return self._test_auth()
+
+        except Exception as e:
+            print(f"Automatic login error: {e}")
+            return False
+        finally:
+            try:
+                if driver:
+                    driver.quit()
+            except Exception:
+                pass
 
     def _manual_cookie_login(self) -> bool:
-        """Manual cookie extraction from user's browser"""
-        print("\n=== MANUAL COOKIE EXTRACTION ===")
-        print("Automated login failed. Let's extract cookies manually.")
-        print("\n1. Open Chrome and go to https://es.wallapop.com")
-        print("2. Log in normally (this works with 2FA, captchas, etc.)")
-        print("3. Open Developer Tools (F12)")
-        print("4. Go to Application tab > Cookies > https://es.wallapop.com")
-        print("5. Look for these cookies:")
-        print("   - accessToken (required)")
-        print("   - MPID (optional)")
-        
-        access_token = input("\nEnter accessToken value: ").strip()
-        if not access_token:
-            print("accessToken is required for authentication")
+        """Prompt user to paste cookies manually and persist them via SessionManager.save_session"""
+        print("Paste __Secure-next-auth.session-token (end with empty line):")
+        session_token = self._get_long_token_input()
+        if not session_token:
             return False
-            
-        mpid = input("Enter MPID value (press Enter if not found): ").strip()
-        
-        # Set cookies in session exactly like the automated version
-        self.session.cookies.set('accessToken', access_token)
-        if mpid:
-            self.session.cookies.set('MPID', mpid)
-        
-        # Save session
-        cookies = {
-            'accessToken': access_token,
-            'MPID': mpid
+        print("Paste __Host-next-auth.csrf-token (end with empty line):")
+        csrf_token = self._get_long_token_input()
+        if not csrf_token:
+            return False
+        mpid = input("Enter MPID (optional):").strip()
+        device_id = input("Enter device_id (optional):").strip()
+        cookies_dict = {
+            "__Secure-next-auth.session-token": session_token,
+            "__Host-next-auth.csrf-token": csrf_token,
         }
-        self.session_manager.save_session(cookies)
-        
-        # Test the session
-        if self._test_auth():
-            print("✓ Manual cookie extraction successful!")
-            return True
-        else:
-            print("✗ Cookies don't seem to work. Please try again or check if you're still logged in.")
+        if mpid:
+            cookies_dict["MPID"] = mpid
+        if device_id:
+            cookies_dict["device_id"] = device_id
+        try:
+            if hasattr(self.session_manager, 'save_session'):
+                self.session_manager.save_session(cookies_dict)
+        except Exception:
+            pass
+        if not self.refresh_access_token():
             return False
+        return self._test_auth()
+
+    def _get_long_token_input(self):
+        import sys
+        lines = []
+        while True:
+            line = sys.stdin.readline()
+            if line is None or line == "":
+                break
+            if line.strip() == "":
+                break
+            lines.append(line.rstrip("\n"))
+        token = ''.join(lines)
+        final_token = ''.join(token.split())
+        return final_token
 
     def login(self, email: str, password: str) -> bool:
-        """Login with session persistence and fallback options"""
-        # Try to load existing session first
-        if self.session_manager.load_session():
-            print("Loaded saved session, testing...")
-            if self._test_auth():
-                print("✓ Existing session is valid")
-                return True
-            else:
-                print("Saved session expired, need fresh login")
-        
-        # Try automated login first
-        print("Attempting automated login with randomized fingerprint...")
-        if self._fresh_login(email, password):
+        """Legacy login workflow used by tests. Tries session, then fresh, then manual fallback."""
+        # Try to reuse existing session
+        if self.session_manager.load_session() and self._test_auth():
+            self._ensure_session()
             return True
-        
-        # Fall back to manual cookie extraction
-        print("\nAutomated login failed. This might be due to:")
-        print("- Enhanced bot detection")
-        print("- Changed page structure") 
-        print("- Captcha or 2FA requirements")
-        
-        choice = input("\nTry manual cookie extraction? (Y/n): ").lower().strip()
-        if choice in ['', 'y', 'yes']:  # Default to 'y' when user presses Enter
-            return self._manual_cookie_login()
-        
-        print("Login failed. Please check your credentials or try again later.")
+
+        # Try fresh login (usually patched in tests)
+        if self._fresh_login(email, password):
+            self._ensure_session()
+            return True
+
+        # Manual cookie extraction fallback
+        choice = (input("Manual cookie extraction? [Y/n]: ").strip() or 'y').lower()
+        if choice in ('y', 'yes'):
+            ok = self._manual_cookie_login()
+            if ok:
+                self._ensure_session()
+            return ok
         return False
-    
-    def _test_auth(self) -> bool:
-        """Test if current session is authenticated"""
+
+    def get_session_status(self) -> Dict[str, Any]:
+        """Get current session status and information"""
         try:
-            # Test web session first
-            response = self.session.get(f"{self.web_url}/api/auth/session")
-            return response.status_code == 200
-        except:
-            return False
-    
-    def _fresh_login(self, email: str, password: str) -> bool:
-        """Perform fresh browser login with randomized fingerprint"""
-        try:
-            # Get session-consistent fingerprint
-            fingerprint = self._get_session_fingerprint()
-            
-            options = Options()
-            
-            # Core anti-detection (these are standard)
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--no-sandbox")
-            
-            # Ensure captcha compatibility
-            options.add_argument("--enable-javascript")  # Ensure JS is enabled for captchas
-            
-            # Use session-consistent user agent
-            options.add_argument(f"--user-agent={fingerprint['user_agent']}")
-            
-            # Use session-consistent window size
-            width, height = fingerprint['viewport']
-            options.add_argument(f"--window-size={width},{height}")
-            
-            # Randomized Chrome switches (sometimes include, sometimes don't)
-            # Randomly include 60-80% of optional switches
-            selected_switches = random.sample(
-                OPTIONAL_CHROME_SWITCHES, 
-                k=random.randint(
-                    int(len(OPTIONAL_CHROME_SWITCHES) * CHROME_SWITCHES_MIN_RATIO), 
-                    int(len(OPTIONAL_CHROME_SWITCHES) * CHROME_SWITCHES_MAX_RATIO)
-                )
-            )
-            
-            for switch in selected_switches:
-                options.add_argument(switch)
-            
-            # Always exclude these
-            options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
-            options.add_experimental_option('useAutomationExtension', False)
-            
-            # Randomized preferences - but ensure images are always enabled for captchas
-            prefs = {
-                "profile.default_content_setting_values.notifications": 2,
-                "profile.managed_default_content_settings.images": 1  # Always enable images for captchas
-            }
-            
-            # Sometimes add additional random prefs
-            if random.random() > 0.5:
-                prefs["profile.default_content_settings.popups"] = 0
-            if random.random() > 0.7:
-                prefs["profile.default_content_setting_values.geolocation"] = random.choice([1, 2])
-                
-            options.add_experimental_option("prefs", prefs)
-            
-            print(f"Starting browser with fingerprint: {fingerprint['user_agent'][:50]}...")
-            self.driver = webdriver.Chrome(options=options)
-            
-            # Apply randomized fingerprint
-            fingerprint_script = self._generate_fingerprint_script(fingerprint)
-            self.driver.execute_script(fingerprint_script)
-            
-            # Random delay before navigation
-            time.sleep(random.uniform(NAVIGATION_DELAY_MIN, NAVIGATION_DELAY_MAX))
-            
-            print("Navigating to Wallapop login page...")
-            self.driver.get("https://es.wallapop.com/auth/signin")
-            
-            # Add human behavior
-            self._add_human_behavior()
-            time.sleep(random.uniform(PAGE_LOAD_DELAY_MIN, PAGE_LOAD_DELAY_MAX))
-            
-            # Wait for page to load
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            
-            print("Login page loaded. Please complete login manually...")
-            print("The script will detect when login is successful and continue automatically.")
-            
-            # Check if we're already on the login form or need to find it
-            try:
-                # Try to find email field to see if we're on the login form
-                email_field = self.driver.find_elements(By.XPATH, "//input[@type='email' or @name='email' or contains(@placeholder, 'email')]")
-                
-                if email_field:
-                    print("Found email field. Please enter your login credentials manually.")
-                    print("✓ You can handle 2FA, captchas, etc. as needed")
-                    # Pre-fill email if found
-                    try:
-                        email_field[0].clear()
-                        email_field[0].send_keys(email)
-                        print(f"Pre-filled email: {email}")
-                    except:
-                        print("Could not pre-fill email, please enter manually")
-                else:
-                    print("Login form not immediately visible. Please navigate to login if needed.")
-                
-                print("Complete login manually (captcha, SMS, etc.)...")
-                print("Script will continue automatically when login is detected...")
-                print("You can also close the browser to skip to manual cookie extraction.")
-                
-                # Wait for login completion or browser closure
-                def login_completed(driver):
-                    try:
-                        current_url = driver.current_url
-                        # Check for successful login indicators
-                        return any([
-                            "catalog" in current_url,
-                            "app/you" in current_url,
-                            "/app/" in current_url,
-                            len(driver.find_elements(By.CSS_SELECTOR, "[data-testid*='user'], .user-menu, .profile-menu")) > 0
-                        ])
-                    except:
-                        return False
-                
-                def is_browser_alive(driver):
-                    try:
-                        # Try to get current URL - this will fail if browser is closed
-                        driver.current_url
-                        return True
-                    except:
-                        return False
-                
-                # Custom wait loop that checks for both login completion and browser closure
-                max_wait_time = LOGIN_TIMEOUT_SECONDS  # 5 minutes
-                check_interval = BROWSER_CHECK_INTERVAL_SECONDS   # Check every 2 seconds
-                elapsed_time = 0
-                
-                while elapsed_time < max_wait_time:
-                    if not is_browser_alive(self.driver):
-                        print("Browser was closed. Moving to manual cookie extraction...")
-                        return False  # This will trigger the fallback
-                    
-                    if login_completed(self.driver):
-                        break
-                    
-                    time.sleep(check_interval)
-                    elapsed_time += check_interval
-                
-                # Check one more time if we exited due to timeout
-                if elapsed_time >= max_wait_time:
-                    print("Login timeout reached. Moving to manual cookie extraction...")
-                    return False
-                
-                if not is_browser_alive(self.driver):
-                    print("Browser was closed during check. Moving to manual cookie extraction...")
-                    return False
-                
-                print("Login detected! Extracting session...")
-                
-                # Check if browser is still alive before session extraction
-                if not is_browser_alive(self.driver):
-                    print("Browser was closed after login detection. Moving to manual cookie extraction...")
-                    return False
-                
-                # Navigate to a page that makes API calls to capture headers
-                try:
-                    self.driver.get("https://es.wallapop.com/app/catalog/published")
-                    time.sleep(3)
-                    
-                    # Call federated session endpoint like in the analysis
-                    self.driver.get("https://es.wallapop.com/api/auth/federated-session")
-                    time.sleep(2)
-                except:
-                    print("Browser closed during session extraction. Moving to manual cookie extraction...")
-                    return False
-                
-                # Extract cookies
-                cookies = {}
-                try:
-                    for cookie in self.driver.get_cookies():
-                        cookies[cookie['name']] = cookie['value']
-                        self.session.cookies.set(cookie['name'], cookie['value'])
-                except:
-                    print("Browser closed during cookie extraction. Moving to manual cookie extraction...")
-                    return False
-                
-                # Save session for future use
-                self.session_manager.save_session(cookies)
-                
-                # Close browser after successful extraction
-                try:
-                    self.driver.quit()
-                except:
-                    pass  # Browser might already be closed
-                
-                # Test the extracted session
-                if self._test_auth():
-                    print("✓ Session extracted successfully")
-                    return True
-                else:
-                    print("✗ Session extraction failed")
-                    return False
-                    
-            except Exception as e:
-                print(f"Error during login process: {e}")
-                if self.driver:
-                    self.driver.quit()
-                return False
-                
-        except Exception as e:
-            print(f"Error setting up browser: {e}")
-            if self.driver:
-                self.driver.quit()
-            return False
-    
+            summary = self.session_manager.get_session_status()
+        except Exception:
+            summary = {'valid': False, 'reason': 'Unknown'}
+        return {
+            'valid': bool(summary.get('valid', False)),
+            'expires': summary.get('expires'),
+            'expires_readable': summary.get('expires_readable'),
+            'cookies_count': len(self.session.cookies) if self.session else 0,
+            'session_file_exists': self.session_manager.session_file.exists(),
+            'source': getattr(self.session_manager, 'cookies_file', 'session')
+        }
+
     def get_user_products(self) -> List[Dict[str, Any]]:
-        """Get current user's products"""
+        """Fetch all products for the authenticated user"""
         try:
-            # Get access token from cookies
-            access_token = self.session.cookies.get('accessToken')
-            if not access_token:
-                print("No access token found in cookies")
-                return []
+            self._ensure_session()
+            # HAR-aligned headers that appear in app calls
+            mpid = self.session.cookies.get('MPID', '')
+            device_id = self.session.cookies.get('device_id', '')
+            extra_headers = {
+                'Referer': 'https://es.wallapop.com/',
+                'Origin': 'https://es.wallapop.com',
+                'X-AppVersion': '810840',
+                'X-DeviceID': device_id or '',
+                'X-DeviceOS': '0',
+                'DeviceOS': '0',
+            }
+            if mpid:
+                extra_headers['MPID'] = mpid
+
+            # Make authenticated request to get user products
+            response = self._make_authenticated_request(
+                'GET', 
+                f"{self.base_url}/api/v3/user/items",
+                headers=extra_headers
+            )
             
-            # Add Authorization header
-            headers = {'Authorization': f'Bearer {access_token}'}
-            
-            response = self.session.get(f"{self.base_url}/api/v3/user/items", headers=headers)
-            
-            if response.status_code == 200:
-                data = response.json()
-                products = []
-                
-                items = data.get('items', data.get('data', []))
-                
-                for item in items:
-                    # Handle price field which might be a dict
-                    price_data = item.get('price', 0)
-                    if isinstance(price_data, dict):
-                        price = float(price_data.get('amount', 0))
-                        currency = price_data.get('currency', 'EUR')
+            if response and response.status_code == 200:
+                raw = response.json()
+                items: List[Dict[str, Any]] = []
+                if isinstance(raw, list):
+                    items = raw
+                elif isinstance(raw, dict):
+                    if isinstance(raw.get('data'), list):
+                        items = raw.get('data') or []
+                    elif isinstance(raw.get('data'), dict) and isinstance(raw['data'].get('products'), list):
+                        items = raw['data'].get('products') or []
+                    elif isinstance(raw.get('products'), list):
+                        items = raw.get('products') or []
+
+                # Normalize shape for downstream code: id, name, price (float), last_modified
+                normalized: List[Dict[str, Any]] = []
+                for p in items:
+                    pid = p.get('id') or p.get('item_id')
+                    title = p.get('title') or p.get('name') or ''
+                    price_raw = p.get('price')
+                    price: float
+                    if isinstance(price_raw, dict) and 'amount' in price_raw:
+                        price = float(price_raw.get('amount') or 0)
                     else:
-                        price = float(price_data)
-                        currency = item.get('currency', 'EUR')
-                    
-                    products.append({
-                        'id': item.get('id'),
-                        'name': item.get('title', item.get('name', '')),
+                        try:
+                            price = (price_raw or 0) / 100.0
+                        except Exception:
+                            price = 0.0
+                    last_mod = p.get('modified_date') or p.get('last_modified')
+                    normalized.append({
+                        'id': pid,
+                        'name': title,
                         'price': price,
-                        'currency': currency,
-                        'status': item.get('status'),
-                        'last_modified': item.get('modified_date', item.get('updated_at'))
+                        'last_modified': last_mod,
+                        # keep original too for any custom needs
+                        '_raw': p,
                     })
-                
-                return products
+                return normalized
             else:
-                print(f"API failed: {response.status_code} - {response.text[:200]}")
-                if response.status_code == 401:
-                    self.session_manager.clear_session()
+                # Log a short snippet of the body for diagnostics
+                body = ''
+                if response is not None:
+                    try:
+                        body = response.text[:300]
+                    except Exception:
+                        body = ''
+                print(f"Failed to fetch products: {response.status_code if response else 'No response'} {body}")
                 return []
                 
         except Exception as e:
-            print(f"Error getting products: {e}")
+            print(f"Error fetching user products: {e}")
             return []
-    
+
     def get_product_details(self, product_id: str) -> Dict[str, Any]:
         """Get detailed product information for editing"""
         try:
-            access_token = self.session.cookies.get('accessToken')
-            if not access_token:
-                return {}
-            
-            # Use same headers as in the captured request
             mpid = self.session.cookies.get('MPID', '')
             device_id = self.session.cookies.get('device_id', '')
-            
-            headers = {
-                'Accept': 'application/json, text/plain, */*',
-                'Authorization': f'Bearer {access_token}',
-                'Content-Type': 'application/json',
-                'DeviceOS': '0',
-                'MPID': mpid,
+            extra_headers = {
                 'Referer': 'https://es.wallapop.com/',
                 'X-AppVersion': '89340',
-                'X-DeviceID': device_id,
-                'X-DeviceOS': '0'
+                'X-DeviceOS': '0',
             }
+            if mpid:
+                extra_headers['MPID'] = mpid
+            if device_id:
+                extra_headers['X-DeviceID'] = device_id
+
+            response = self._make_authenticated_request(
+                'GET', 
+                f"{self.base_url}/api/v3/items/{product_id}/edit?language=es",
+                headers=extra_headers
+            )
             
-            response = self.session.get(f"{self.base_url}/api/v3/items/{product_id}/edit?language=es", headers=headers)
-            
-            if response.status_code == 200:
+            if response and response.status_code == 200:
                 return response.json()
             else:
-                print(f"Failed to get product details: {response.status_code} - {response.text[:200]}")
+                print(f"Failed to get product details: {response.status_code if response else 'No response'}")
                 return {}
                 
         except Exception as e:
             print(f"Error getting product details: {e}")
             return {}
-    
+
     def update_product_price(self, product_id: str, new_price: float) -> bool:
         """Update product price"""
         try:
-            access_token = self.session.cookies.get('accessToken')
-            if not access_token:
-                print("No access token found")
+            self._ensure_session()
+            # First get current product details
+            current_details = self.get_product_details(product_id)
+            if not current_details:
+                print("Could not get current product details")
                 return False
             
-            # Get product details in edit format
-            product_details = self.get_product_details(product_id)
-            if not product_details:
-                print("Could not get product details")
-                return False
+            # Extract required fields and update price
+            data = current_details.get('data', {})
             
-            # Use exact headers from captured price update request
-            mpid = self.session.cookies.get('MPID', '')
-            device_id = self.session.cookies.get('device_id', '')
-            
-            # First call the components endpoint like in the captured request
-            components_headers = {
-                'Accept': 'application/json, text/plain, */*',
-                'Authorization': f'Bearer {access_token}',
-                'Content-Type': 'application/json',
-                'DeviceOS': '0',
-                'MPID': mpid,
-                'Referer': 'https://es.wallapop.com/',
-                'X-AppVersion': '89340',
-                'X-DeviceID': device_id,
-                'X-DeviceOS': '0'
-            }
-            
-            components_payload = {
-                'fields': {
-                    'id': product_id,
-                    'category_leaf_id': product_details.get('taxonomy', [{}])[-1].get('id', '')
-                },
-                'mode': {
-                    'action': 'edit',
-                    'id': f'{product_id}-edit-session'
-                }
-            }
-            
-            components_response = self.session.post(
-                f"{self.base_url}/api/v3/items/upload/components",
-                json=components_payload,
-                headers=components_headers
-            )
-            
-            print(f"Components response: {components_response.status_code}")
-            if components_response.status_code >= 400:
-                print(f"Components error: {components_response.text}")
-                return False
-            
-            # Now do the actual update
-            headers = {
-                'Accept': 'application/vnd.upload-v2+json',
-                'Accept-Language': 'es,ca-ES;q=0.9,ca;q=0.8',
-                'Authorization': f'Bearer {access_token}',
-                'Content-Type': 'application/json',
-                'DeviceOS': '0',
-                'MPID': mpid,
-                'Referer': 'https://es.wallapop.com/',
-                'X-AppVersion': '89340',
-                'X-DeviceID': device_id,
-                'X-DeviceOS': '0'
-            }
-            
+            # Build the update payload with all required fields
             payload = {
-                'attributes': {
-                    'title': product_details.get('title', {}).get('original', ''),
-                    'description': product_details.get('description', {}).get('original', ''),
-                    'condition': product_details.get('type_attributes', {}).get('condition', {}).get('value', 'as_good_as_new')
-                },
-                'category_leaf_id': product_details.get('taxonomy', [{}])[-1].get('id', ''),
-                'price': {
-                    'cash_amount': new_price,
-                    'currency': 'EUR',
-                    'apply_discount': False
-                },
-                'location': {
-                    'latitude': product_details.get('location', {}).get('latitude', 0),
-                    'longitude': product_details.get('location', {}).get('longitude', 0),
-                    'approximated': False
-                },
-                'delivery': {
-                    'allowed_by_user': product_details.get('shipping', {}).get('user_allows_shipping', True),
-                    'max_weight_kg': int(float(product_details.get('type_attributes', {}).get('up_to_kg', {}).get('value', '1.0')))
-                }
+                "id": data.get('id'),
+                "title": data.get('title'),
+                "description": data.get('description'),
+                "category_id": data.get('category_id'),
+                "price": int(new_price * 100),  # Convert to cents
+                "currency": "EUR",
+                "condition": data.get('condition'),
+                "images": data.get('images', []),
+                "location": data.get('location'),
+                "shipping": data.get('shipping'),
+                "extra_info": data.get('extra_info', {}),
+                "web_slug": data.get('web_slug')
             }
             
-            response = self.session.put(
+            # Remove None values
+            payload = {k: v for k, v in payload.items() if v is not None}
+            
+            print(f"Updating product {product_id} price to €{new_price}")
+            
+            # Make authenticated PUT request to update the product
+            response = self._make_authenticated_request(
+                'PUT',
                 f"{self.base_url}/api/v3/items/{product_id}",
-                json=payload,
-                headers=headers
+                json=payload
             )
             
-            if response.status_code >= 400:
-                print(f"Update response: {response.status_code}")
-                print(f"Full error response: {response.text}")
-                print(f"Payload sent: {json.dumps(payload, indent=2)}")
-            else:
+            if response and response.status_code in [200, 204]:
                 print(f"✓ Price updated successfully to €{new_price}")
-            
-            return response.status_code in [200, 204]
+                return True
+            else:
+                print(f"Update failed: {response.status_code if response else 'No response'}")
+                if response:
+                    print(f"Error response: {response.text[:200]}")
+                return False
             
         except Exception as e:
             print(f"Error updating product price: {e}")
             return False
+
+    def refresh_session(self) -> bool:
+        """Refresh the session if needed"""
+        # Backwards compatibility: delegate to access token refresh
+        ok, _ = self.session_manager.refresh_access_token()
+        return ok
+
+    # Allow tests to patch this method directly
+    def refresh_access_token(self) -> bool:
+        ok, _ = self.session_manager.refresh_access_token()
+        return ok
+
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit"""
+        # Clean up if needed
+        pass

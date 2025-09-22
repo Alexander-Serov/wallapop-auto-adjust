@@ -145,13 +145,19 @@ class TestWallapopClientLoginWorkflow(unittest.TestCase):
         with patch('wallapop_auto_adjust.wallapop_client.SessionManager'):
             client = WallapopClient()
             
-            # Test with empty access token
-            with patch('builtins.input', side_effect=['', 'test-mpid']):
+            # Test with empty session token
+            with patch('sys.stdin.readline', side_effect=['', '\n']):  # Empty token, then empty line to end
                 result = client._manual_cookie_login()
                 self.assertFalse(result)
             
-            # Test with valid access token
-            with patch('builtins.input', side_effect=['test-token', 'test-mpid']), \
+            # Test with valid tokens
+            with patch('sys.stdin.readline', side_effect=[
+                'test-session-token\n', '\n',  # Session token + end marker
+                'test-csrf-token\n', '\n',     # CSRF token + end marker  
+                'test-mpid\n',                 # MPID
+                'test-device-id\n'             # Device ID
+            ]), \
+                 patch.object(client, 'refresh_access_token', return_value=True), \
                  patch.object(client, '_test_auth', return_value=True), \
                  patch.object(client.session_manager, 'save_session'):
                 
