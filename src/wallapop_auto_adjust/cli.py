@@ -43,9 +43,11 @@ def main() -> None:
         print("\nNo valid session. Choose a login method:")
         print("  1) Automatic login (browser automation)")
         print("  2) Manual cookie copy (guided)")
-        choice = (os.getenv("WALLAPOP_LOGIN_METHOD") or input("Select [1/2] (default 2): ")).strip() or '2'
+        choice = (
+            os.getenv("WALLAPOP_LOGIN_METHOD") or input("Select [1/2] (default 2): ")
+        ).strip() or "2"
 
-        if choice == '1':
+        if choice == "1":
             # Automatic login via modern client
             try:
                 # Use WallapopClient's built-in automatic login
@@ -63,7 +65,10 @@ def main() -> None:
         else:
             # Manual cookie copy via packaged guide
             try:
-                from wallapop_auto_adjust.cookie_extraction_guide import CookieExtractionGuide
+                from wallapop_auto_adjust.cookie_extraction_guide import (
+                    CookieExtractionGuide,
+                )
+
                 guide = CookieExtractionGuide()
                 if not guide.run():
                     print("Manual cookie extraction did not complete. Exiting.")
@@ -90,7 +95,7 @@ def main() -> None:
     # Update config with discovered products
     print(f"\n3. Found {len(products)} products. Updating configuration...")
     config_manager.update_products(products)
-    
+
     # Remove sold products from config
     sold_products = config_manager.remove_sold_products(products)
     if sold_products:
@@ -99,7 +104,7 @@ def main() -> None:
             print(f"   - {product_name}")
     else:
         print("\n✅ No sold products to remove from configuration.")
-    
+
     config_manager.save_config()
 
     # Process price adjustments

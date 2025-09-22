@@ -20,16 +20,16 @@ class StubSPM:
     def refresh_access_token(self):
         # Simulate obtaining an accessToken
         self.refreshed = True
-        return True, 'GUIDE_TOKEN'
+        return True, "GUIDE_TOKEN"
 
 
 def test_cookie_guide_validation_and_persist(tmp_path, monkeypatch):
     # Create guide and redirect its paths into tmp
     guide = CookieExtractionGuide()
     guide_root = tmp_path
-    guide.root_cookies_path = guide_root / 'cookies.json'
-    guide.session_file = guide_root / 'session_data.json'
-    guide.cookies_file = guide_root / 'cookies.json'
+    guide.root_cookies_path = guide_root / "cookies.json"
+    guide.session_file = guide_root / "session_data.json"
+    guide.cookies_file = guide_root / "cookies.json"
 
     # Prepare a root cookies file with required fields
     cookies_payload = {
@@ -42,7 +42,8 @@ def test_cookie_guide_validation_and_persist(tmp_path, monkeypatch):
     # Patch the SessionPersistenceManager used within the guide to our stub
     # Patch the real class so imports inside guide refer to our stub
     import wallapop_auto_adjust.session_persistence as spm_module
-    monkeypatch.setattr(spm_module, 'SessionPersistenceManager', StubSPM)
+
+    monkeypatch.setattr(spm_module, "SessionPersistenceManager", StubSPM)
 
     # Read, validate and test the session without persistence
     cookies = guide.read_root_cookies()
@@ -53,9 +54,9 @@ def test_cookie_guide_validation_and_persist(tmp_path, monkeypatch):
     assert guide.save_session_data(cookies) is True
     assert guide.session_file.exists()
     data = json.loads(guide.session_file.read_text())
-    assert 'cookies' in data and '__Secure-next-auth.session-token' in data['cookies']
+    assert "cookies" in data and "__Secure-next-auth.session-token" in data["cookies"]
     # Check expiration roughly 29-31 days ahead
-    expires = datetime.fromisoformat(data['expires'])
+    expires = datetime.fromisoformat(data["expires"])
     delta = expires - datetime.now()
     assert timedelta(days=29) < delta < timedelta(days=31)
     # cookies.json mirror also written

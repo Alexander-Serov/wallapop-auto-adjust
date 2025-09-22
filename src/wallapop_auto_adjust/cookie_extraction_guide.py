@@ -10,11 +10,11 @@ your home directory: ~/.wallapop-auto-adjust.
 # === String Constants ===
 CALLBACK_URL = "https%3A%2F%2Fes.wallapop.com%2Fapp%2Fcatalog%2Fpublished"
 REQUIRED_COOKIES = [
-    '__Secure-next-auth.session-token',
-    '__Host-next-auth.csrf-token',
+    "__Secure-next-auth.session-token",
+    "__Host-next-auth.csrf-token",
 ]
 OPTIONAL_COOKIES = [
-    'device_id',
+    "device_id",
 ]
 ROOT_COOKIE_KEYS = [
     "__Secure-next-auth.session-token",
@@ -49,19 +49,21 @@ class CookieExtractionGuide:
         # Resolve repo root for the editable template file
         repo_root = Path(__file__).resolve().parents[2]
         # Session home under user directory (same as SessionPersistenceManager)
-        base_dir = Path.home() / '.wallapop-auto-adjust'
+        base_dir = Path.home() / ".wallapop-auto-adjust"
         base_dir.mkdir(parents=True, exist_ok=True)
-        self.session_file = base_dir / 'session_data.json'
-        self.cookies_file = base_dir / 'cookies.json'
-        self.root_cookies_path = repo_root / 'cookies.json'
+        self.session_file = base_dir / "session_data.json"
+        self.cookies_file = base_dir / "cookies.json"
+        self.root_cookies_path = repo_root / "cookies.json"
 
     def show_welcome(self):
         print("=" * 60)
         print("🔑 WALLAPOP MANUAL COOKIE SETUP")
         print("=" * 60)
         print()
-        print("I will now guide you through copying Wallapop cookies from an active Wallapop" \
-        " session in your browser so that they can be used here.")
+        print(
+            "I will now guide you through copying Wallapop cookies from an active Wallapop"
+            " session in your browser so that they can be used here."
+        )
         print()
         print("📋 What you'll need:")
         print("  • An active Wallapop session in your browser")
@@ -76,17 +78,21 @@ class CookieExtractionGuide:
         if self.session_file.exists():
             try:
                 data = json.loads(self.session_file.read_text())
-                expires_str = data.get('expires')
+                expires_str = data.get("expires")
                 if expires_str:
-                    expires = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
+                    expires = datetime.fromisoformat(expires_str.replace("Z", "+00:00"))
                     if expires > datetime.now():
                         days_left = (expires - datetime.now()).days
                         print(f"🟢 EXISTING SESSION FOUND")
                         print(f"   Valid for {days_left} more days")
                         print(f"   Expires: {expires.strftime('%Y-%m-%d %H:%M:%S')}")
                         print()
-                        choice = input("Do you want to use the existing session? (Y/n): ").strip().lower()
-                        if choice in ('', 'y', 'yes'):
+                        choice = (
+                            input("Do you want to use the existing session? (Y/n): ")
+                            .strip()
+                            .lower()
+                        )
+                        if choice in ("", "y", "yes"):
                             print("✅ Using existing session")
                             return True
                         else:
@@ -106,14 +112,16 @@ class CookieExtractionGuide:
             "__Secure-next-auth.session-token": "",
             "__Host-next-auth.csrf-token": "",
             "__Secure-next-auth.callback-url": CALLBACK_URL,
-            "device_id": ""
+            "device_id": "",
         }
 
     def ensure_root_template(self) -> None:
         if not self.root_cookies_path.exists():
             try:
                 # Keep unicode arrows and symbols readable in file
-                self.root_cookies_path.write_text(json.dumps(self._template_content(), indent=2, ensure_ascii=False))
+                self.root_cookies_path.write_text(
+                    json.dumps(self._template_content(), indent=2, ensure_ascii=False)
+                )
                 print(f"📝 Created template at: {self.root_cookies_path}")
             except Exception as e:
                 print(f"❌ Failed to create template: {e}")
@@ -123,7 +131,9 @@ class CookieExtractionGuide:
                 data = json.loads(self.root_cookies_path.read_text())
                 if not data.get("__Secure-next-auth.callback-url"):
                     data["__Secure-next-auth.callback-url"] = CALLBACK_URL
-                    self.root_cookies_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+                    self.root_cookies_path.write_text(
+                        json.dumps(data, indent=2, ensure_ascii=False)
+                    )
             except Exception:
                 pass
 
@@ -162,9 +172,9 @@ class CookieExtractionGuide:
             for c in missing:
                 print(f"   • {c}")
             return False
-        if len(cookies.get('__Secure-next-auth.session-token', '')) < 1000:
+        if len(cookies.get("__Secure-next-auth.session-token", "")) < 1000:
             print("⚠️  Session token seems short (<1000 chars)")
-        if len(cookies.get('__Host-next-auth.csrf-token', '')) < 50:
+        if len(cookies.get("__Host-next-auth.csrf-token", "")) < 50:
             print("⚠️  CSRF token seems short (<50 chars)")
         # Callback URL is auto-set; confirm presence
         print("✅ Cookie validation passed")
@@ -175,13 +185,13 @@ class CookieExtractionGuide:
         expires = datetime.now() + timedelta(days=30)
         # Ensure callback-url is set
         cookies = dict(cookies)
-        cookies.setdefault('__Secure-next-auth.callback-url', CALLBACK_URL)
+        cookies.setdefault("__Secure-next-auth.callback-url", CALLBACK_URL)
 
         session_data = {
-            'cookies': cookies,
-            'created': datetime.now().isoformat(),
-            'expires': expires.isoformat(),
-            'version': '1.0'
+            "cookies": cookies,
+            "created": datetime.now().isoformat(),
+            "expires": expires.isoformat(),
+            "version": "1.0",
         }
         try:
             # Save session file
@@ -204,7 +214,9 @@ class CookieExtractionGuide:
         except Exception:
             # Fallback to runtime import path
             try:
-                from wallapop_auto_adjust.session_persistence import SessionPersistenceManager
+                from wallapop_auto_adjust.session_persistence import (
+                    SessionPersistenceManager,
+                )
             except Exception as e:
                 print(f"❌ Could not import SessionPersistenceManager: {e}")
                 return False
@@ -233,9 +245,10 @@ class CookieExtractionGuide:
 
     def run(self):
         self.show_welcome()
-    # If a valid saved session exists and works, just use it
+        # If a valid saved session exists and works, just use it
         try:
             from .session_persistence import SessionPersistenceManager
+
             spm = SessionPersistenceManager()
             if spm.load_session():
                 ok, _ = spm.refresh_access_token()
@@ -243,7 +256,9 @@ class CookieExtractionGuide:
                     print("🟢 Using existing saved session")
                     return True
                 else:
-                    print("⚠️ Existing saved session did not validate; need fresh cookies")
+                    print(
+                        "⚠️ Existing saved session did not validate; need fresh cookies"
+                    )
         except Exception:
             pass
 
@@ -257,10 +272,12 @@ class CookieExtractionGuide:
             return False
         # Test without persisting
         if not self.test_session(cookies):
-            print("❌ Validation failed. Please re-open and update the root cookies.json and run again.")
+            print(
+                "❌ Validation failed. Please re-open and update the root cookies.json and run again."
+            )
             return False
 
-    # Persist to ~/.wallapop-auto-adjust for future runs
+        # Persist to ~/.wallapop-auto-adjust for future runs
         if not self.save_session_data(cookies):
             return False
         self.show_completion()
@@ -270,7 +287,11 @@ class CookieExtractionGuide:
 def main():
     guide = CookieExtractionGuide()
     ok = guide.run()
-    print("Cookie extraction completed successfully!" if ok else "Cookie extraction was not completed.")
+    print(
+        "Cookie extraction completed successfully!"
+        if ok
+        else "Cookie extraction was not completed."
+    )
 
 
 if __name__ == "__main__":
