@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 import json
 
+
 def analyze_captured_requests():
     """Analyze the captured Wallapop API requests"""
     try:
-        with open('../wallapop_analysis.json', 'r') as f:
+        with open("../wallapop_analysis.json", "r") as f:
             data = json.load(f)
     except FileNotFoundError:
         print("No analysis file found. Run analyze_requests.py first.")
@@ -40,6 +41,7 @@ def analyze_captured_requests():
     print("3. Product editing uses /api/v3/items/{id}/edit")
     print("4. All requests require proper session cookies from login")
     print("5. CAPTCHA may be required during login process")
+
 
 if __name__ == "__main__":
     analyze_captured_requests()

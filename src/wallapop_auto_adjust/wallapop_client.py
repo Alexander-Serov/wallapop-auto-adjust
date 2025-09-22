@@ -5,7 +5,10 @@ import sys
 import os
 import random
 from pathlib import Path
-from wallapop_auto_adjust.session_persistence import SessionPersistenceManager, SessionManager as _CompatSessionManager
+from wallapop_auto_adjust.session_persistence import (
+    SessionPersistenceManager,
+    SessionManager as _CompatSessionManager,
+)
 
 
 """
@@ -23,7 +26,7 @@ SessionManager = _CompatSessionManager
 
 class WallapopClient:
     """Modern Wallapop API client using persistent session management"""
-    
+
     def __init__(self):
         """Initialize the Wallapop client with modern session management"""
         # Use the compatibility SessionManager so tests can patch this symbol
@@ -33,15 +36,17 @@ class WallapopClient:
         # Lazily load session when needed; do not raise during __init__ (tests patch behavior)
         self.session = None
         # Use the same home session directory as SessionPersistenceManager (no env override)
-        self.session_dir = Path.home() / '.wallapop-auto-adjust'
+        self.session_dir = Path.home() / ".wallapop-auto-adjust"
         try:
             self.session_dir.mkdir(parents=True, exist_ok=True)
         except Exception:
             pass
-        self.fingerprint_file = self.session_dir / 'fingerprint.json'
+        self.fingerprint_file = self.session_dir / "fingerprint.json"
         # Do not set headers yet; headers are applied when the session is actually loaded
 
-    def _make_authenticated_request(self, method: str, url: str, **kwargs) -> Optional[requests.Response]:
+    def _make_authenticated_request(
+        self, method: str, url: str, **kwargs
+    ) -> Optional[requests.Response]:
         """Make an authenticated request using the session manager"""
         return self.session_manager.make_authenticated_request(method, url, **kwargs)
 
@@ -54,19 +59,21 @@ class WallapopClient:
             # Try to load; ignore return here as callers will handle auth state
             self.session_manager.load_session()
         self.session = self.session_manager.session
-        if self.session and 'User-Agent' not in self.session.headers:
+        if self.session and "User-Agent" not in self.session.headers:
             # Set common headers for all requests once
-            self.session.headers.update({
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
-                'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Origin': 'https://es.wallapop.com',
-                'Referer': 'https://es.wallapop.com/app/catalog/published',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-site'
-            })
+            self.session.headers.update(
+                {
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+                    "Accept": "application/json, text/plain, */*",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Origin": "https://es.wallapop.com",
+                    "Referer": "https://es.wallapop.com/app/catalog/published",
+                    "Sec-Fetch-Dest": "empty",
+                    "Sec-Fetch-Mode": "cors",
+                    "Sec-Fetch-Site": "same-site",
+                }
+            )
 
     def _get_session_fingerprint(self) -> Dict[str, Any]:
         """Generate or load a simple browser fingerprint for the session.
@@ -75,7 +82,7 @@ class WallapopClient:
         """
         try:
             if self.fingerprint_file.exists():
-                with open(self.fingerprint_file, 'r') as f:
+                with open(self.fingerprint_file, "r") as f:
                     return json.load(f)
         except Exception:
             pass
@@ -104,13 +111,16 @@ class WallapopClient:
         )
         fingerprint = {
             "user_agent": user_agent,
-            "viewport": [viewport[0], viewport[1]],  # store as list for JSON compatibility
+            "viewport": [
+                viewport[0],
+                viewport[1],
+            ],  # store as list for JSON compatibility
             "platform": platform,
             "languages": languages,
             "timezone_offset": tz_offset,
         }
         try:
-            with open(self.fingerprint_file, 'w') as f:
+            with open(self.fingerprint_file, "w") as f:
                 json.dump(fingerprint, f)
         except Exception:
             pass
@@ -120,7 +130,7 @@ class WallapopClient:
         """Lightweight auth test – here we just rely on session status."""
         try:
             status = self.session_manager.get_session_status()
-            return bool(status.get('valid'))
+            return bool(status.get("valid"))
         except Exception:
             return False
 
@@ -137,11 +147,18 @@ class WallapopClient:
         # Lazy-import heavy deps to avoid cost at import time
         try:
             import importlib
-            uc = importlib.import_module('undetected_chromedriver')
-            By = importlib.import_module('selenium.webdriver.common.by').By
-            WebDriverWait = importlib.import_module('selenium.webdriver.support.ui').WebDriverWait
-            EC = importlib.import_module('selenium.webdriver.support.expected_conditions')
-            Options = importlib.import_module('selenium.webdriver.chrome.options').Options
+
+            uc = importlib.import_module("undetected_chromedriver")
+            By = importlib.import_module("selenium.webdriver.common.by").By
+            WebDriverWait = importlib.import_module(
+                "selenium.webdriver.support.ui"
+            ).WebDriverWait
+            EC = importlib.import_module(
+                "selenium.webdriver.support.expected_conditions"
+            )
+            Options = importlib.import_module(
+                "selenium.webdriver.chrome.options"
+            ).Options
         except Exception as e:
             print(f"Automatic login unavailable (selenium dependency missing?): {e}")
             return False
@@ -151,8 +168,8 @@ class WallapopClient:
 
         # Build a consistent fingerprint for this session
         fp = self._get_session_fingerprint()
-        ua = fp.get('user_agent')
-        viewport = fp.get('viewport') or [1280, 800]
+        ua = fp.get("user_agent")
+        viewport = fp.get("viewport") or [1280, 800]
         width, height = int(viewport[0]), int(viewport[1])
 
         # Configure the browser
@@ -171,7 +188,9 @@ class WallapopClient:
 
             # Wait for the page body to load
             try:
-                WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "body"))
+                )
             except Exception:
                 pass
 
@@ -183,16 +202,22 @@ class WallapopClient:
                 try:
                     url = driver.current_url
                     # Simple heuristics indicating we are in the app area
-                    if any(k in url for k in ("/app/", "/app/catalog", "you", "published")):
+                    if any(
+                        k in url for k in ("/app/", "/app/catalog", "you", "published")
+                    ):
                         return True
                     # Or presence of typical user UI elements
-                    els = driver.find_elements(By.CSS_SELECTOR, "[data-testid*='user'], .user-menu, .profile-menu")
+                    els = driver.find_elements(
+                        By.CSS_SELECTOR,
+                        "[data-testid*='user'], .user-menu, .profile-menu",
+                    )
                     return len(els) > 0
                 except Exception:
                     return False
 
             # Up to ~5 minutes, check every 2s
             import time as _time
+
             max_wait, step, waited = 300, 2, 0
             while waited < max_wait and not login_completed():
                 _time.sleep(step)
@@ -215,7 +240,7 @@ class WallapopClient:
             cookies = {}
             try:
                 for c in driver.get_cookies():
-                    cookies[c.get('name')] = c.get('value')
+                    cookies[c.get("name")] = c.get("value")
             except Exception:
                 pass
 
@@ -225,7 +250,7 @@ class WallapopClient:
 
             # Persist and attempt refresh
             try:
-                if hasattr(self.session_manager, 'save_session'):
+                if hasattr(self.session_manager, "save_session"):
                     self.session_manager.save_session(cookies)
             except Exception:
                 pass
@@ -269,7 +294,7 @@ class WallapopClient:
         if device_id:
             cookies_dict["device_id"] = device_id
         try:
-            if hasattr(self.session_manager, 'save_session'):
+            if hasattr(self.session_manager, "save_session"):
                 self.session_manager.save_session(cookies_dict)
         except Exception:
             pass
@@ -279,6 +304,7 @@ class WallapopClient:
 
     def _get_long_token_input(self):
         import sys
+
         lines = []
         while True:
             line = sys.stdin.readline()
@@ -287,8 +313,8 @@ class WallapopClient:
             if line.strip() == "":
                 break
             lines.append(line.rstrip("\n"))
-        token = ''.join(lines)
-        final_token = ''.join(token.split())
+        token = "".join(lines)
+        final_token = "".join(token.split())
         return final_token
 
     def login(self, email: str, password: str) -> bool:
@@ -304,8 +330,8 @@ class WallapopClient:
             return True
 
         # Manual cookie extraction fallback
-        choice = (input("Manual cookie extraction? [Y/n]: ").strip() or 'y').lower()
-        if choice in ('y', 'yes'):
+        choice = (input("Manual cookie extraction? [Y/n]: ").strip() or "y").lower()
+        if choice in ("y", "yes"):
             ok = self._manual_cookie_login()
             if ok:
                 self._ensure_session()
@@ -317,14 +343,14 @@ class WallapopClient:
         try:
             summary = self.session_manager.get_session_status()
         except Exception:
-            summary = {'valid': False, 'reason': 'Unknown'}
+            summary = {"valid": False, "reason": "Unknown"}
         return {
-            'valid': bool(summary.get('valid', False)),
-            'expires': summary.get('expires'),
-            'expires_readable': summary.get('expires_readable'),
-            'cookies_count': len(self.session.cookies) if self.session else 0,
-            'session_file_exists': self.session_manager.session_file.exists(),
-            'source': getattr(self.session_manager, 'cookies_file', 'session')
+            "valid": bool(summary.get("valid", False)),
+            "expires": summary.get("expires"),
+            "expires_readable": summary.get("expires_readable"),
+            "cookies_count": len(self.session.cookies) if self.session else 0,
+            "session_file_exists": self.session_manager.session_file.exists(),
+            "source": getattr(self.session_manager, "cookies_file", "session"),
         }
 
     def get_user_products(self) -> List[Dict[str, Any]]:
@@ -332,74 +358,78 @@ class WallapopClient:
         try:
             self._ensure_session()
             # HAR-aligned headers that appear in app calls
-            mpid = self.session.cookies.get('MPID', '')
-            device_id = self.session.cookies.get('device_id', '')
+            mpid = self.session.cookies.get("MPID", "")
+            device_id = self.session.cookies.get("device_id", "")
             extra_headers = {
-                'Referer': 'https://es.wallapop.com/',
-                'Origin': 'https://es.wallapop.com',
-                'X-AppVersion': '810840',
-                'X-DeviceID': device_id or '',
-                'X-DeviceOS': '0',
-                'DeviceOS': '0',
+                "Referer": "https://es.wallapop.com/",
+                "Origin": "https://es.wallapop.com",
+                "X-AppVersion": "810840",
+                "X-DeviceID": device_id or "",
+                "X-DeviceOS": "0",
+                "DeviceOS": "0",
             }
             if mpid:
-                extra_headers['MPID'] = mpid
+                extra_headers["MPID"] = mpid
 
             # Make authenticated request to get user products
             response = self._make_authenticated_request(
-                'GET', 
-                f"{self.base_url}/api/v3/user/items",
-                headers=extra_headers
+                "GET", f"{self.base_url}/api/v3/user/items", headers=extra_headers
             )
-            
+
             if response and response.status_code == 200:
                 raw = response.json()
                 items: List[Dict[str, Any]] = []
                 if isinstance(raw, list):
                     items = raw
                 elif isinstance(raw, dict):
-                    if isinstance(raw.get('data'), list):
-                        items = raw.get('data') or []
-                    elif isinstance(raw.get('data'), dict) and isinstance(raw['data'].get('products'), list):
-                        items = raw['data'].get('products') or []
-                    elif isinstance(raw.get('products'), list):
-                        items = raw.get('products') or []
+                    if isinstance(raw.get("data"), list):
+                        items = raw.get("data") or []
+                    elif isinstance(raw.get("data"), dict) and isinstance(
+                        raw["data"].get("products"), list
+                    ):
+                        items = raw["data"].get("products") or []
+                    elif isinstance(raw.get("products"), list):
+                        items = raw.get("products") or []
 
                 # Normalize shape for downstream code: id, name, price (float), last_modified
                 normalized: List[Dict[str, Any]] = []
                 for p in items:
-                    pid = p.get('id') or p.get('item_id')
-                    title = p.get('title') or p.get('name') or ''
-                    price_raw = p.get('price')
+                    pid = p.get("id") or p.get("item_id")
+                    title = p.get("title") or p.get("name") or ""
+                    price_raw = p.get("price")
                     price: float
-                    if isinstance(price_raw, dict) and 'amount' in price_raw:
-                        price = float(price_raw.get('amount') or 0)
+                    if isinstance(price_raw, dict) and "amount" in price_raw:
+                        price = float(price_raw.get("amount") or 0)
                     else:
                         try:
                             price = (price_raw or 0) / 100.0
                         except Exception:
                             price = 0.0
-                    last_mod = p.get('modified_date') or p.get('last_modified')
-                    normalized.append({
-                        'id': pid,
-                        'name': title,
-                        'price': price,
-                        'last_modified': last_mod,
-                        # keep original too for any custom needs
-                        '_raw': p,
-                    })
+                    last_mod = p.get("modified_date") or p.get("last_modified")
+                    normalized.append(
+                        {
+                            "id": pid,
+                            "name": title,
+                            "price": price,
+                            "last_modified": last_mod,
+                            # keep original too for any custom needs
+                            "_raw": p,
+                        }
+                    )
                 return normalized
             else:
                 # Log a short snippet of the body for diagnostics
-                body = ''
+                body = ""
                 if response is not None:
                     try:
                         body = response.text[:300]
                     except Exception:
-                        body = ''
-                print(f"Failed to fetch products: {response.status_code if response else 'No response'} {body}")
+                        body = ""
+                print(
+                    f"Failed to fetch products: {response.status_code if response else 'No response'} {body}"
+                )
                 return []
-                
+
         except Exception as e:
             print(f"Error fetching user products: {e}")
             return []
@@ -407,30 +437,32 @@ class WallapopClient:
     def get_product_details(self, product_id: str) -> Dict[str, Any]:
         """Get detailed product information for editing"""
         try:
-            mpid = self.session.cookies.get('MPID', '')
-            device_id = self.session.cookies.get('device_id', '')
+            mpid = self.session.cookies.get("MPID", "")
+            device_id = self.session.cookies.get("device_id", "")
             extra_headers = {
-                'Referer': 'https://es.wallapop.com/',
-                'X-AppVersion': '89340',
-                'X-DeviceOS': '0',
+                "Referer": "https://es.wallapop.com/",
+                "X-AppVersion": "89340",
+                "X-DeviceOS": "0",
             }
             if mpid:
-                extra_headers['MPID'] = mpid
+                extra_headers["MPID"] = mpid
             if device_id:
-                extra_headers['X-DeviceID'] = device_id
+                extra_headers["X-DeviceID"] = device_id
 
             response = self._make_authenticated_request(
-                'GET', 
+                "GET",
                 f"{self.base_url}/api/v3/items/{product_id}/edit?language=es",
-                headers=extra_headers
+                headers=extra_headers,
             )
-            
+
             if response and response.status_code == 200:
                 return response.json()
             else:
-                print(f"Failed to get product details: {response.status_code if response else 'No response'}")
+                print(
+                    f"Failed to get product details: {response.status_code if response else 'No response'}"
+                )
                 return {}
-                
+
         except Exception as e:
             print(f"Error getting product details: {e}")
             return {}
@@ -444,47 +476,47 @@ class WallapopClient:
             if not current_details:
                 print("Could not get current product details")
                 return False
-            
+
             # Extract required fields and update price
-            data = current_details.get('data', {})
-            
+            data = current_details.get("data", {})
+
             # Build the update payload with all required fields
             payload = {
-                "id": data.get('id'),
-                "title": data.get('title'),
-                "description": data.get('description'),
-                "category_id": data.get('category_id'),
+                "id": data.get("id"),
+                "title": data.get("title"),
+                "description": data.get("description"),
+                "category_id": data.get("category_id"),
                 "price": int(new_price * 100),  # Convert to cents
                 "currency": "EUR",
-                "condition": data.get('condition'),
-                "images": data.get('images', []),
-                "location": data.get('location'),
-                "shipping": data.get('shipping'),
-                "extra_info": data.get('extra_info', {}),
-                "web_slug": data.get('web_slug')
+                "condition": data.get("condition"),
+                "images": data.get("images", []),
+                "location": data.get("location"),
+                "shipping": data.get("shipping"),
+                "extra_info": data.get("extra_info", {}),
+                "web_slug": data.get("web_slug"),
             }
-            
+
             # Remove None values
             payload = {k: v for k, v in payload.items() if v is not None}
-            
+
             print(f"Updating product {product_id} price to €{new_price}")
-            
+
             # Make authenticated PUT request to update the product
             response = self._make_authenticated_request(
-                'PUT',
-                f"{self.base_url}/api/v3/items/{product_id}",
-                json=payload
+                "PUT", f"{self.base_url}/api/v3/items/{product_id}", json=payload
             )
-            
+
             if response and response.status_code in [200, 204]:
                 print(f"✓ Price updated successfully to €{new_price}")
                 return True
             else:
-                print(f"Update failed: {response.status_code if response else 'No response'}")
+                print(
+                    f"Update failed: {response.status_code if response else 'No response'}"
+                )
                 if response:
                     print(f"Error response: {response.text[:200]}")
                 return False
-            
+
         except Exception as e:
             print(f"Error updating product price: {e}")
             return False
