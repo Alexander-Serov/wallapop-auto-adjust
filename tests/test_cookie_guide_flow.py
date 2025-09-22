@@ -28,9 +28,8 @@ def test_cookie_guide_validation_and_persist(tmp_path, monkeypatch):
     guide = CookieExtractionGuide()
     guide_root = tmp_path
     guide.root_cookies_path = guide_root / 'cookies.json'
-    guide.session_file = guide_root / '.session' / 'session_data.json'
-    guide.cookies_file = guide_root / '.session' / 'cookies.json'
-    guide.cookies_file.parent.mkdir(parents=True, exist_ok=True)
+    guide.session_file = guide_root / 'session_data.json'
+    guide.cookies_file = guide_root / 'cookies.json'
 
     # Prepare a root cookies file with required fields
     cookies_payload = {
