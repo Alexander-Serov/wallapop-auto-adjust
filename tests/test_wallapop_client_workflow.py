@@ -91,7 +91,7 @@ class TestWallapopClientLoginWorkflow(unittest.TestCase):
             WallapopClient()
             
             # Should create .tmp directory
-            mock_mkdir.assert_called_once_with(exist_ok=True)
+            mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
     
     @patch('wallapop_auto_adjust.wallapop_client.random.choice')
     def test_fingerprint_randomization(self, mock_random_choice):
