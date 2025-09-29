@@ -54,6 +54,9 @@ poetry run black --check .
 poetry run black .
 ```
 
+### Testing Conventions
+- Use pytest function-style tests and fixtures exclusively. Avoid `unittest.TestCase` or other class-based harnesses when writing or updating tests.
+
 ### IDE Integration
 For local development with IDE support:
 - **VS Code**: Use the built-in Test Explorer or Python extension's test discovery. Ensure Poetry virtual environment is selected as Python interpreter.

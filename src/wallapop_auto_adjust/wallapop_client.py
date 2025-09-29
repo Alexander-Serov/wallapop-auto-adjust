@@ -477,33 +477,125 @@ class WallapopClient:
                 print("Could not get current product details")
                 return False
 
-            # Extract required fields and update price
-            data = current_details.get("data", {})
+            # Extract required fields and update price using the correct API payload structure
+            data = current_details
 
-            # Build the update payload with all required fields
-            payload = {
-                "id": data.get("id"),
-                "title": data.get("title"),
-                "description": data.get("description"),
-                "category_id": data.get("category_id"),
-                "price": int(new_price * 100),  # Convert to cents
-                "currency": "EUR",
-                "condition": data.get("condition"),
-                "images": data.get("images", []),
-                "location": data.get("location"),
-                "shipping": data.get("shipping"),
-                "extra_info": data.get("extra_info", {}),
-                "web_slug": data.get("web_slug"),
+            # Extract the proper field values based on actual API response structure
+            title = (
+                data.get("title", {}).get("original")
+                if isinstance(data.get("title"), dict)
+                else data.get("title")
+            )
+            description = (
+                data.get("description", {}).get("original")
+                if isinstance(data.get("description"), dict)
+                else data.get("description")
+            )
+
+            # Get category from taxonomy if available - use the most specific one (last in array)
+            category_leaf_id = None
+            taxonomy = data.get("taxonomy", [])
+            if taxonomy and len(taxonomy) > 0:
+                category_leaf_id = taxonomy[-1].get("id")
+
+            # Get condition from type_attributes and map to API expected values
+            condition = None
+            type_attributes = data.get("type_attributes", {})
+            if "condition" in type_attributes:
+                api_condition = type_attributes["condition"].get("value")
+                # Map API response conditions to expected values (see HAR payloads)
+                condition_mapping = {
+                    "as_good_as_new": "good",
+                }
+                condition = condition_mapping.get(api_condition, api_condition)
+
+            # Extract location data
+            location = data.get("location", {})
+
+            # Extract delivery/shipping info
+            shipping = data.get("shipping", {})
+            delivery_info = {
+                "allowed_by_user": shipping.get("user_allows_shipping"),
+                "max_weight_kg": shipping.get("max_weight_kg")
+                or shipping.get("max_weight")
+                or shipping.get("weight"),
             }
 
-            # Remove None values
-            payload = {k: v for k, v in payload.items() if v is not None}
+            # Extract any brand info if available
+            brand = None
+            if "brand" in type_attributes:
+                brand = type_attributes["brand"].get("value")
+
+            # Build the correct payload structure as shown in the HAR file
+            payload = {
+                "attributes": {
+                    "title": title,
+                    "description": description,
+                    "condition": condition,
+                },
+                "category_leaf_id": category_leaf_id,
+                "price": {
+                    "cash_amount": round(
+                        new_price, 2
+                    ),
+                    "currency": "EUR",
+                    "apply_discount": False,
+                },
+                "location": {
+                    "latitude": location.get("latitude"),
+                    "longitude": location.get("longitude"),
+                    "approximated": location.get("approximated", False),
+                },
+                "delivery": delivery_info,
+            }
+
+            # Add brand if available
+            if brand:
+                payload["attributes"]["brand"] = brand
+
+            # Remove None values from nested structures
+            def clean_dict(value):
+                if isinstance(value, dict):
+                    cleaned = {}
+                    for key, nested in value.items():
+                        cleaned_value = clean_dict(nested)
+                        if cleaned_value in (None, {}, []):
+                            continue
+                        cleaned[key] = cleaned_value
+                    return cleaned
+                if isinstance(value, list):
+                    cleaned_list = [
+                        clean_dict(item) for item in value if item is not None
+                    ]
+                    return [item for item in cleaned_list if item not in ({}, [])]
+                return value
+
+            payload = clean_dict(payload)
 
             print(f"Updating product {product_id} price to €{new_price}")
 
-            # Make authenticated PUT request to update the product
+            # Make authenticated PUT request to update the product with correct headers
+            url = f"{self.base_url}/api/v3/items/{product_id}"
+
+            # Add the specific headers used by the web interface
+            extra_headers = {
+                "Accept": "application/vnd.upload-v2+json",
+                "Content-Type": "application/json",
+                "Referer": "https://es.wallapop.com/",
+                "Origin": "https://es.wallapop.com",
+                "X-AppVersion": "811030",
+                "X-DeviceOS": "0",
+                "DeviceOS": "0",
+            }
+
+            # Add device ID if available from session
+            if hasattr(self.session, "cookies"):
+                device_id = self.session.cookies.get("device_id", "")
+                if device_id:
+                    extra_headers["X-DeviceID"] = device_id
+
             response = self._make_authenticated_request(
-                "PUT", f"{self.base_url}/api/v3/items/{product_id}", json=payload
+                "PUT", url, json=payload, headers=extra_headers
             )
 
             if response and response.status_code in [200, 204]:
@@ -513,7 +605,7 @@ class WallapopClient:
                 print(
                     f"Update failed: {response.status_code if response else 'No response'}"
                 )
-                if response:
+                if response and response.text:
                     print(f"Error response: {response.text[:200]}")
                 return False
 
