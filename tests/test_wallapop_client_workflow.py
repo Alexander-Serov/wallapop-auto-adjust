@@ -205,6 +205,33 @@ class TestWallapopClientLoginWorkflow(unittest.TestCase):
                 result = client._manual_cookie_login()
                 self.assertTrue(result)
 
+    def test_get_user_products_includes_reserved_flags(self):
+        """Reserved products should be surfaced in normalized payload"""
+        self.client._ensure_session = MagicMock()
+        self.client.session = MagicMock()
+        self.client.session.cookies = {"MPID": "", "device_id": ""}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = [
+            {
+                "id": "pres",
+                "title": "Reserved Item",
+                "price": {"amount": 12.5, "currency": "EUR"},
+                "modified_date": 1234,
+                "reserved": {"flag": True},
+            }
+        ]
+
+        with patch.object(self.client, "_make_authenticated_request", return_value=mock_response):
+            products = self.client.get_user_products()
+
+        self.assertEqual(len(products), 1)
+        product = products[0]
+        self.assertTrue(product["reserved"])
+        self.assertEqual(product["status"], "reserved")
+        self.assertTrue(product["flags"]["reserved"])
+
 
 def mock_open_json(data):
     """Helper to mock open() for JSON files"""

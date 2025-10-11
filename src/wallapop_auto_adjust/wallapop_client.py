@@ -393,6 +393,12 @@ class WallapopClient:
 
                 # Normalize shape for downstream code: id, name, price (float), last_modified
                 normalized: List[Dict[str, Any]] = []
+
+                def extract_flag(value: Any) -> bool:
+                    if isinstance(value, dict):
+                        return bool(value.get("flag"))
+                    return bool(value)
+
                 for p in items:
                     pid = p.get("id") or p.get("item_id")
                     title = p.get("title") or p.get("name") or ""
@@ -406,12 +412,36 @@ class WallapopClient:
                         except Exception:
                             price = 0.0
                     last_mod = p.get("modified_date") or p.get("last_modified")
+
+                    reserved_flag = extract_flag(p.get("reserved"))
+                    sold_flag = extract_flag(p.get("sold"))
+                    pending_flag = extract_flag(p.get("pending"))
+                    blocked_flag = extract_flag(p.get("blocked"))
+                    on_hold_flag = extract_flag(p.get("on_hold") or p.get("onhold"))
+
+                    flags = {
+                        "reserved": reserved_flag,
+                        "sold": sold_flag,
+                        "pending": pending_flag,
+                        "blocked": blocked_flag,
+                        "on_hold": on_hold_flag,
+                    }
+
+                    for key, value in p.items():
+                        if key in flags:
+                            continue
+                        if isinstance(value, dict) and "flag" in value:
+                            flags[key] = bool(value.get("flag"))
+
                     normalized.append(
                         {
                             "id": pid,
                             "name": title,
                             "price": price,
                             "last_modified": last_mod,
+                            "status": "reserved" if reserved_flag else "available",
+                            "reserved": reserved_flag,
+                            "flags": flags,
                             # keep original too for any custom needs
                             "_raw": p,
                         }

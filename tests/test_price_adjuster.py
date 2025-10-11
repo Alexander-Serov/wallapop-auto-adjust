@@ -58,3 +58,95 @@ def test_should_update_price_delay_met(tmp_path):
 
     pa = PriceAdjuster(wallapop_client=None, config_manager=cfg)
     assert pa.should_update_price(product_id) is True
+
+
+def test_adjust_product_price_skips_reserved(tmp_path):
+    cfg = make_config(tmp_path, delay_days=0)
+    product_id = "pres"
+    cfg.config["products"][product_id] = {
+        "name": "Reserved Item",
+        "adjustment": 0.9,
+    }
+
+    class DummyClient:
+        def __init__(self):
+            self.called = False
+
+        def update_product_price(self, *_args, **_kwargs):
+            self.called = True
+            return True
+
+    client = DummyClient()
+    pa = PriceAdjuster(wallapop_client=client, config_manager=cfg)
+
+    product = {
+        "id": product_id,
+        "name": "Reserved Item",
+        "price": 10.0,
+        "status": "reserved",
+        "reserved": True,
+        "flags": {"reserved": True},
+    }
+
+    result = pa.adjust_product_price(product)
+
+    assert result is False
+    assert client.called is False
+
+
+def test_adjust_product_price_warns_on_unknown_flag(tmp_path, capsys, monkeypatch):
+    cfg = make_config(tmp_path, delay_days=0)
+    product_id = "pf"
+    cfg.config["products"][product_id] = {
+        "name": "Flagged Item",
+        "adjustment": 0.9,
+    }
+
+    pa = PriceAdjuster(wallapop_client=None, config_manager=cfg)
+    monkeypatch.setattr(
+        pa,
+        "get_user_adjustment",
+        lambda *args, **kwargs: "keep",
+        raising=False,
+    )
+
+    product = {
+        "id": product_id,
+        "name": "Flagged Item",
+        "price": 12.0,
+        "status": "available",
+        "flags": {"mystery_flag": True},
+    }
+
+    pa.adjust_product_price(product)
+    out = capsys.readouterr().out
+    assert "mystery_flag" in out
+
+
+def test_adjust_product_price_warns_on_unknown_status(tmp_path, capsys, monkeypatch):
+    cfg = make_config(tmp_path, delay_days=0)
+    product_id = "ps"
+    cfg.config["products"][product_id] = {
+        "name": "Status Item",
+        "adjustment": 0.9,
+    }
+
+    pa = PriceAdjuster(wallapop_client=None, config_manager=cfg)
+    monkeypatch.setattr(
+        pa,
+        "get_user_adjustment",
+        lambda *args, **kwargs: "keep",
+        raising=False,
+    )
+
+    product = {
+        "id": product_id,
+        "name": "Status Item",
+        "price": 8.0,
+        "status": "stalled",
+        "flags": {},
+    }
+
+    pa.adjust_product_price(product)
+    out = capsys.readouterr().out
+    assert "stalled" in out
