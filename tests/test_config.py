@@ -98,8 +98,8 @@ class TestConfigManager:
         # Test removing sold products
         removed_products = config_manager.remove_sold_products(current_products)
 
-        # Should return the removed product name
-        assert removed_products == ["Product 2"]
+        # Should return the removed product name with ID
+        assert removed_products == ["Product 2 (67890)"]
 
         # Config should no longer contain the sold product
         assert "67890" not in config_manager.config["products"]
@@ -112,5 +112,5 @@ class TestConfigManager:
 
         # Test with empty current products (all sold)
         all_removed = config_manager.remove_sold_products([])
-        assert set(all_removed) == {"Product 1", "Product 3"}
+        assert set(all_removed) == {"Product 1 (12345)", "Product 3 (11111)"}
         assert config_manager.config["products"] == {}

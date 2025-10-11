@@ -62,7 +62,7 @@ class ConfigManager:
             current_products: List of products currently returned by API
 
         Returns:
-            List of product names that were removed
+            List of display strings in the format "<name> (<id>)" for removed products
         """
         # Get current product IDs from API
         current_product_ids = {product["id"] for product in current_products}
@@ -72,11 +72,14 @@ class ConfigManager:
         sold_product_ids = config_product_ids - current_product_ids
 
         removed_products = []
-        for product_id in sold_product_ids:
-            product_name = self.config["products"][product_id].get(
-                "title", f"Product {product_id}"
+        for product_id in sorted(sold_product_ids):
+            product_entry = self.config["products"].get(product_id, {})
+            product_name = (
+                product_entry.get("name")
+                or product_entry.get("title")
+                or f"Product {product_id}"
             )
-            removed_products.append(product_name)
+            removed_products.append(f"{product_name} ({product_id})")
             del self.config["products"][product_id]
 
         return removed_products
